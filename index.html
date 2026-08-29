@@ -412,6 +412,16 @@ button:hover { background: #3e332a; }
 }
 .iconOnlyBtn:hover { background-color: #efeae1 !important; }
 
+/* 관리자 로그인 표시 라벨 */
+.adminBadge {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  background-color: #8c7355;
+  color: #fff;
+  border-radius: 3px;
+  font-family: 'Noto Sans KR', sans-serif;
+}
+
 .commentCount { color: #9e9282; margin-left: 0.2rem; white-space: nowrap; }
 .commentNumber { font-size: 0.75rem; font-weight: normal; }
 
@@ -817,6 +827,10 @@ mark { background: #f3e1b9; border-radius: 2px; }
     <div class="headerWithButton">
       <div class="headerTop">
         <h2>명대사 추가</h2>
+        <div>
+          <span id="adminBadge" class="adminBadge" style="display:none;">👑 관리자</span>
+          <button id="authBtn" class="smallBtn" onclick="toggleAuth()" style="width:auto; margin:0; display:inline-block;">🔑 로그인</button>
+        </div>
       </div>
       <div class="headerBtns">
         <button class="smallBtn highlightBtn" onclick="handleHighlightButton()">✨ 선택 문장 하이라이트</button>
@@ -844,13 +858,11 @@ mark { background: #f3e1b9; border-radius: 2px; }
 
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
-<!-- ───── Firebase: 명대사 데이터를 모든 방문자가 함께 보는 저장소로 연결 ─────
-     이 모듈 스크립트는 브라우저가 알아서 "문서 파싱이 끝난 뒤" 실행해주기 때문에,
-     아래에 있는 일반 <script>(메인 로직)가 먼저 다 실행되고 나서 이 코드가 뒤이어 동작합니다.
-     즉 window.onQuotesUpdated 함수가 먼저 정의된 뒤 이 스크립트가 그 함수를 호출하는 순서가 보장됩니다. -->
+<!-- ───── Firebase & Authentication 설정 ───── -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
   import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+  import { getAuth, signInAnonymously, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDtKBIa2lMEBqDeaGgbMw-vz0JPQ6JGnd0",
@@ -863,16 +875,31 @@ mark { background: #f3e1b9; border-radius: 2px; }
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
-  // "shared/quotes" 라는 문서 딱 하나에 명대사 배열 전체를 저장합니다.
-  // (사람이 많이 몰리는 서비스라면 명대사 하나당 문서 하나씩 나누는 게 정석이지만,
-  //  포트폴리오용 소규모 공유 사이트에는 이 방식이 훨씬 단순하고 관리하기 쉬워요.)
+  const auth = getAuth(app);
   const quotesDocRef = doc(db, "shared", "quotes");
 
-  // 메인 <script>에서 Firestore 함수를 쓸 수 있도록 window에 걸어둡니다.
-  window.__fb = { setDoc, quotesDocRef };
+  const ADMIN_EMAIL = "baeksy0032@gmail.com";
 
-  // 실시간 리스너: 나 또는 다른 누군가가 Firestore 데이터를 바꾸면
-  // 이 콜백이 즉시 실행되어 화면을 새로고침 없이 갱신합니다.
+  window.__fb = { setDoc, quotesDocRef };
+  window.__auth = { auth, signInAnonymously, GoogleAuthProvider, signInWithPopup, signOut };
+
+  // 사용자 로그인 상태 감지
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      window.currentUser = user;
+      window.isAdmin = (user.email === ADMIN_EMAIL);
+    } else {
+      // 기본적으로 익명 로그인 수행
+      signInAnonymously(auth).catch(err => console.error("익명 로그인 오류:", err));
+      window.currentUser = null;
+      window.isAdmin = false;
+    }
+    updateAuthUI();
+    if (typeof window.reRenderCurrentView === "function") {
+      window.reRenderCurrentView();
+    }
+  });
+
   onSnapshot(quotesDocRef, (snap) => {
     const list = snap.exists() ? (snap.data().list || []) : [];
     if (typeof window.onQuotesUpdated === "function") {
@@ -902,30 +929,22 @@ function buildFontOptionsHTML(selectedValue) {
   ).join("");
 }
 
-// quotes는 이제 이 브라우저만의 데이터가 아니라 Firestore(공유 서버)에서 실시간으로 받아옵니다.
-// 처음엔 빈 배열로 시작했다가, 아래 window.onQuotesUpdated가 호출되면서 실제 데이터로 채워져요.
 let quotes = [];
-// likedQuotes(내가 좋아요 누른 명대사)와 collections(내 모음집)는 계속 이 브라우저에만 저장됩니다.
 let likedQuotes = JSON.parse(localStorage.getItem("likedQuotes") || "[]");
 
-let sortAsc = false; // false = 최신순, true = 오래된순
+let sortAsc = false;
 let showingLiked = false; 
 let showingHighlight = false; 
 
-// 명대사 각각에 붙는, 절대 바뀌지 않는 고유 번호를 만듭니다.
-// (배열 순서(index)는 다른 사람이 삭제/추가하면 밀릴 수 있지만, 이 id는 그 명대사가 사라지기 전까지 항상 그대로예요.
-//  그래서 "내가 좋아요 누른 명대사", "이 모음집에 담긴 명대사"를 이 id로 기억해둡니다.)
 function generateQuoteId() {
   return "q_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-// 혹시 id가 없는 명대사가 섞여 있으면(예: 백업 복구) 여기서 채워줍니다.
 function ensureQuoteIds(list) {
   list.forEach(q => { if (!q.id) q.id = generateQuoteId(); });
   return list;
 }
 
-// Firestore에서 실시간으로 데이터가 올 때마다(내가 저장했을 때 포함) 이 함수가 호출됩니다.
 window.onQuotesUpdated = function (list) {
   quotes = ensureQuoteIds(list || []);
   reRenderCurrentView();
@@ -986,12 +1005,10 @@ function updateSortIcon() {
   }
 }
 
-// likedQuotes에는 명대사의 id가 들어있어요. 화면에 그리려면
-// 지금 quotes 배열에서 그 id를 가진 명대사가 몇 번째(index)에 있는지 찾아서 붙여줘야 합니다.
 function getLikedFilteredQuotes() {
   return likedQuotes.map(id => {
     const idx = quotes.findIndex(q => q.id === id);
-    if (idx === -1) return null; // 다른 사람이 이미 삭제한 명대사면 건너뜀
+    if (idx === -1) return null;
     const q = quotes[idx];
     q.__index = idx;
     return q;
@@ -1026,6 +1043,45 @@ sortBtn.onclick = () => {
 
 updateSortIcon();
 
+/* ───── Firebase 인증 관련 UI 갱신 및 처리 ───── */
+function updateAuthUI() {
+  const badge = document.getElementById("adminBadge");
+  const authBtn = document.getElementById("authBtn");
+  if (!badge || !authBtn) return;
+
+  if (window.isAdmin) {
+    badge.style.display = "inline-block";
+    authBtn.textContent = "로그아웃";
+  } else {
+    badge.style.display = "none";
+    authBtn.textContent = window.currentUser && !window.currentUser.isAnonymous ? "로그아웃" : "🔑 로그인";
+  }
+}
+
+function toggleAuth() {
+  if (!window.__auth) return;
+  const { auth, GoogleAuthProvider, signInWithPopup, signOut } = window.__auth;
+
+  if (window.currentUser && (!window.currentUser.isAnonymous || window.isAdmin)) {
+    signOut(auth).then(() => {
+      showAlert("로그아웃되었습니다.");
+    }).catch(err => {
+      showAlert("로그아웃 중 오류가 발생했습니다.");
+    });
+  } else {
+    const provider = new GoogleAuthProvider();
+    signInWithPopup(auth, provider).then((result) => {
+      if (result.user.email === "baeksy0032@gmail.com") {
+        showAlert("관리자 권한으로 로그인되었습니다.");
+      } else {
+        showAlert(`로그인되었습니다. (${result.user.email})`);
+      }
+    }).catch(err => {
+      showAlert("로그인 실패: " + err.message);
+    });
+  }
+}
+
 /* ───── 예쁜 커스텀 알림창 (Alert) ───── */
 function showAlert(message) {
   const existing = document.querySelector('.custom-alert-overlay');
@@ -1044,7 +1100,6 @@ function showAlert(message) {
   `;
 
   document.body.appendChild(overlay);
-
   requestAnimationFrame(() => overlay.classList.add('active'));
 
   const closeAlert = () => {
@@ -1077,7 +1132,6 @@ function showConfirm(message, onConfirm) {
   `;
 
   document.body.appendChild(overlay);
-
   requestAnimationFrame(() => overlay.classList.add('active'));
 
   const closeConfirm = (isApproved) => {
@@ -1520,12 +1574,9 @@ function showRandomQuote() {
 function autoResize(el) { el.style.height = "auto"; el.style.height = (el.scrollHeight) + "px"; }
 function enterSearch(e) { if (e.key === "Enter") { e.preventDefault(); searchQuotes(); } }
 function saveData() { 
-  // 좋아요/모음집은 나만 보는 정보라 계속 이 브라우저(localStorage)에 저장합니다.
   localStorage.setItem("likedQuotes", JSON.stringify(likedQuotes)); 
   localStorage.setItem("collections", JSON.stringify(collections));
 
-  // 명대사 목록은 모두가 함께 보는 정보라 Firestore(공유 서버)에 저장합니다.
-  // 저장에 성공하면 onSnapshot이 자동으로 다시 호출되어 화면을 갱신해줘요.
   if (window.__fb) {
     window.__fb.setDoc(window.__fb.quotesDocRef, { list: quotes }).catch(err => {
       console.error("Firestore 저장 실패:", err);
@@ -1534,9 +1585,7 @@ function saveData() {
   }
 }
 
-/* 명대사 본문만 복사하는 기능 */
 function copyQuoteText(text) {
-  // HTML 태그 제거용 임시 요소
   const tempDiv = document.createElement("div");
   tempDiv.innerHTML = text;
   const cleanText = tempDiv.textContent || tempDiv.innerText || "";
@@ -1637,7 +1686,6 @@ function displayFilteredQuotes(filtered) {
     collectBtn.onclick = (e) => { e.stopPropagation(); openCollectPicker(index); };
     actionDiv.appendChild(collectBtn);
 
-    /* 새로 추가된 명대사 복사 버튼 */
     const copyBtn = document.createElement("button");
     copyBtn.className = "copyBtn";
     copyBtn.innerHTML = "📋";
@@ -1668,11 +1716,14 @@ function displayFilteredQuotes(filtered) {
     };
     actionDiv.appendChild(shareBtn);
 
-    const delBtn = document.createElement("button"); 
-    delBtn.className = "deleteBtn"; 
-    delBtn.textContent = "삭제";
-    delBtn.onclick = (e) => { e.stopPropagation(); deleteQuote(index); };
-    actionDiv.appendChild(delBtn);
+    /* 관리자 권한을 가진 경우에만 삭제 버튼 생성 */
+    if (window.isAdmin) {
+      const delBtn = document.createElement("button"); 
+      delBtn.className = "deleteBtn"; 
+      delBtn.textContent = "삭제";
+      delBtn.onclick = (e) => { e.stopPropagation(); deleteQuote(index); };
+      actionDiv.appendChild(delBtn);
+    }
 
     div.appendChild(actionDiv);
 
@@ -1791,7 +1842,6 @@ function showLikedQuotes() {
   showingCollection = null;
 
   let filtered = getLikedFilteredQuotes();
-
   filtered = sortQuoteList(filtered);
 
   displayFilteredQuotes(filtered);
@@ -1892,9 +1942,11 @@ function isExactDuplicate(newSentence, existingSentences) {
 }
 
 function deleteQuote(index) {
+  if (!window.isAdmin) {
+    showAlert("명대사 삭제는 관리자만 할 수 있습니다.");
+    return;
+  }
   showConfirm("삭제하시겠습니까?", () => {
-    // id로 관리하기 때문에, 다른 명대사가 삭제되어 배열 순서가 바뀌어도
-    // 좋아요/모음집 기록이 엉뚱한 명대사를 가리키는 일이 없습니다.
     const id = quotes[index].id;
     quotes.splice(index, 1);
     likedQuotes = likedQuotes.filter(qid => qid !== id);
@@ -2517,6 +2569,10 @@ window.addEventListener("DOMContentLoaded", () => {
 function refreshPage() { saveData(); location.reload(); }
 
 function exportData() {
+  if (!window.isAdmin) {
+    showAlert("데이터 백업은 관리자만 수행할 수 있습니다.");
+    return;
+  }
   if (quotes.length === 0) {
     showAlert("백업할 명대사 데이터가 없습니다.");
     return;
@@ -2535,6 +2591,10 @@ function exportData() {
 }
 
 function importData() {
+  if (!window.isAdmin) {
+    showAlert("데이터 복구는 관리자만 수행할 수 있습니다.");
+    return;
+  }
   const savedBackup = localStorage.getItem("quote_quick_backup");
 
   if (!savedBackup) {
