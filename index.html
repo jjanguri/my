@@ -15,7 +15,7 @@ body {
   margin: 0;
   padding: 0;
   height: 100vh;
-  font-family: 'Nanum Myeongjo', 'Maru Buri', serif;
+  font-family: 'Maru Buri', 'Nanum Myeongjo',serif;
   background-color: #f6f3eb; /* 앤티크 양장본 종이색 */
   background-image: 
     radial-gradient(#e2dad0 0.75px, transparent 0.75px),
@@ -1785,7 +1785,7 @@ function displayComments(comments, listDiv) {
   comments.forEach((c) => {
     const div = document.createElement("div");
     div.className = "comment";
-    div.innerHTML = `<span class="comment-user"></span><span>${c.text}</span><span class="comment-time">${c.time}</span>`;
+    div.innerHTML = `<span>${c.text}</span><span class="comment-time">${c.time}</span>`;
     listDiv.appendChild(div);
   });
 }
