@@ -1428,7 +1428,7 @@ function openReportModal(index) {
   box.innerHTML = `
     <h3>🚩 신고하기</h3>
     <p style="font-size:0.85rem; color:#5c4e43; margin:0 0 0.6rem;">이 명대사를 신고하는 이유를 알려주세요. (관리자에게만 보여요)</p>
-    <textarea id="reportReasonInput" placeholder="예: 부적절한 내용, 스팸, 저작권 문제 등" style="width:100%; min-height:70px;"></textarea>
+    <textarea id="reportReasonInput" placeholder="예: 부적절한 내용, 스팸, 불쾌한 내용 등" style="width:100%; min-height:70px;"></textarea>
     <button id="reportSubmitBtn">신고 보내기</button>
     <button class="closeShareBtn">취소</button>
   `;
@@ -3346,6 +3346,14 @@ function showOnboardingGuide(forceShow = false) {
         </div>
 
         <div class="guide-item">
+          <div class="guide-icon">🔗</div>
+          <div class="guide-text">
+            <h4>댓글 남기기</h4>
+            <p>명대사 작성 시 링크를 남기면, 제목이 하이퍼링크로 변경되어 한 번에 찾아갈 수 있습니다.</p>
+          </div>
+        </div>
+
+        <div class="guide-item">
           <div class="guide-icon">🗂️</div>
           <div class="guide-text">
             <h4>명대사 모음집</h4>
@@ -3358,6 +3366,14 @@ function showOnboardingGuide(forceShow = false) {
           <div class="guide-text">
             <h4>폰트</h4>
             <p>명대사의 폰트를 바꾸고, *을 통해 글꼴을 바꿀 수 있습니다. *이탤릭체* **볼드체** ***이탤릭체 + 볼드체***</p>
+          </div>
+        </div>
+
+        <div class="guide-item">
+          <div class="guide-icon">🔖</div>
+          <div class="guide-text">
+            <h4>폰트</h4>
+            <p>간단한 비밀번호를 통해 로그인하고, 좋아요했던 명대사를 유지할 수 있습니다.</p>
           </div>
         </div>
 
