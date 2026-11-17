@@ -672,7 +672,7 @@ mark { background: #f3e1b9; border-radius: 2px; }
 @media (max-width: 768px) {
   /* 주소창이 줄었다 늘었다 하는 모바일 브라우저에서도 화면 높이가 맞도록 (지원 안 하는 브라우저는 100vh 그대로) */
   body { height: 100vh; height: 100dvh; }
-
+     
   /* 전체 레이아웃을 1열(세로)로 변경 */
   .layout {
     flex-direction: column;
@@ -759,6 +759,13 @@ mark { background: #f3e1b9; border-radius: 2px; }
     border-top-color: #8c7355;
     font-weight: 700;
   }
+
+  /* 모바일에서 카드 전체 폰트 크기 줄이기 */
+  .quote { font-size: 0.9rem; }
+  .quote-title { font-size: 0.95rem; }
+  
+  /* 모바일에서 입력창 및 버튼 폰트 크기 줄이기 */
+  input, textarea, button { font-size: 0.85rem; }
 
   /* ── 탭에 따라 한쪽 패널만 보여주기 (<body>의 tab-view / tab-write 클래스로 전환) ── */
   body.tab-view  .rightPanel { display: none; }
